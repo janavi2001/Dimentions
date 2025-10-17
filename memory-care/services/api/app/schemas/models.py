@@ -2,11 +2,24 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 class IdentifyResponse(BaseModel):
+    """
+    Returns: dict with keys:
+      - status (str)
+      - person_id (str | None)
+      - confidence (float)
+      - full_name (str | None)
+    """
     status: str
     person_id: Optional[str] = None
     confidence: float
+    full_name: Optional[str] = None
 
 class RegisterResponse(BaseModel):
+    """
+    Returns: dict with keys:
+      - person_id: str
+      - ok: bool
+    """
     person_id: str
     ok: bool
 
