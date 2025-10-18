@@ -53,6 +53,21 @@ function maybeRepairWebm(buf, mime) {
   return buf;
 }
 
+// Try to locate a valid EBML header sequence inside a buffer and return a
+// sliced buffer that begins at the EBML header. This helps when browsers
+// emit chunks where the EBML header isn't at offset 0 for a chunk.
+function findAndSliceToEbml(buf) {
+  if (!buf || buf.length < 4) return null;
+  const b = Buffer.from(buf);
+  // EBML header magic: 0x1A 0x45 0xDF 0xA3
+  for (let i = 0; i + 3 < b.length; i++) {
+    if (b[i] === 0x1A && b[i+1] === 0x45 && b[i+2] === 0xDF && b[i+3] === 0xA3) {
+      return b.slice(i);
+    }
+  }
+  return null;
+}
+
 // Transcode any audio into 16 kHz mono WAV (auto-detect container)
 function transcodeToWav16kMono(buffer) {
   return new Promise((resolve, reject) => {
@@ -103,11 +118,21 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     // Repair common WebM issue (missing leading EBML byte)
-    const repaired = maybeRepairWebm(inBuf, inMime);
+    let repaired = maybeRepairWebm(inBuf, inMime);
     if (repaired !== inBuf) {
       inBuf = repaired;
       inSize = inBuf.length;
       head = hexdump(inBuf, 16);
+      console.log(`Applied prepend EBML lead byte fix (new size=${inSize})`);
+    } else if ((inMime || "").includes("webm")) {
+      // Try to find an EBML header later in the buffer and slice to it
+      const sliced = findAndSliceToEbml(inBuf);
+      if (sliced) {
+        inBuf = Buffer.from(sliced);
+        inSize = inBuf.length;
+        head = hexdump(inBuf, 16);
+        console.log(`Found EBML header inside chunk; sliced to header (new size=${inSize})`);
+      }
     }
 
     // 1) Convert to WAV (or pass through if already WAV)
